@@ -14,6 +14,8 @@ class Controller:
     def __init__(self):
         self.path_sub = rospy.Subscriber('controller_commands', Controller_Commands, self.reference_callback, queue_size = 1)
         self.est_sub = rospy.Subscriber('state', State, self.state_callback, queue_size = 1)
+
+        
         self.command_pub = rospy.Publisher('command', Command, queue_size = 1)
 
         #Variables for the linear velocity
