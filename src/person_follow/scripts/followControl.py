@@ -3,8 +3,8 @@
 import rospy
 from kb_utils.msg import Command
 from kb_utils.msg import Encoder
-from autopilot.msg import Controller_Commands
-from autopilot.msg import State # will we need this one?
+from person_follow.msg import Location
+
 import numpy as np
 import math
 import time
@@ -12,16 +12,15 @@ import time
 class Controller:
 
     def __init__(self):
-        self.path_sub = rospy.Subscriber('controller_commands', Controller_Commands, self.reference_callback, queue_size = 1)
-        self.est_sub = rospy.Subscriber('state', State, self.state_callback, queue_size = 1)
-
+        self.loc_sub = rospy.Subscriber('person_location', Location, self.detection_callback, queue_size = 1)
+        self.enc_sub = rospy.Subscriber('encoder', Encoder, self.encoder_callback, queue_size=1)
         
         self.command_pub = rospy.Publisher('command', Command, queue_size = 1)
 
         #Variables for the linear velocity
         self.Kp_v = 0.5
         self.Kd_v = 0.03
-        self.Ki_v =0.0# 0.1
+        self.Ki_v =0.0 # 0.1
         self.prev_error_v = 0.0
         self.integrator_v = 0.0
         self.sigma_v = 2.5
@@ -49,26 +48,57 @@ class Controller:
         self.u_sat_psi = 1.0
 
         #Variables for storing values from messages
+        self.v = 0.0
         self.v_ref = 0.0
+        self.psi = 0.0
         self.psi_ref = 0.0
-        self.command_v = 0.0
-        self.command_psi = 0.0
+        
+        # constants
+        self.PSI_THRESH = 0.01
+        self.V_THRESH = 0.05
 
-    def reference_callback(self, msg):
+        self.normal_coords_to_psi = .35 # Pay attention to this value and tune if psi performance is wierd
+        self.desired_dist = 2.5
+        self.dist_gain = 0.75 # Also look at this value for tuning 
+
+        #Image data
+        self.dist = 0.0
+        self.left_edge = 0.0
+        self.right_edge = 0.0
+
+    def detection_callback(self, msg):
         #will store the reference value
-        print('Message received')
-        self.v_ref = msg.u_c
-        self.psi_ref = msg.psi_c #heading angle
+        print('Detection message received')
+        self.dist = msg.dist
+        self.left_edge = msg.left_edge
+        self.right_edge = msg.right_edge
+        self.processInputs()
+
+    def encoder_callback(self, msg):
+        #will store the reference value
+        print('Encoder message received')
+        self.v = msg.vel
 
     def run(self):
         while not rospy.is_shutdown():
             rospy.spin()
 
-    def state_callback(self, msg):
+    def processInputs(self):
+        self.psi = (self.left_edge + self.right_edge)*self.normal_coords_to_psi
+        if self.psi < self.PSI_THRESH and self.psi > -self.PSI_THRESH: #This is just to provide a window of acceptable values
+            self.psi = 0.0
+        if self.dist == -1:
+            self.v_ref = 0.0
+        else:
+            self.v_ref = (self.dist - self.desired_dist)*self.dist_gain
+            if self.v_ref < self.V_THRESH and self.v_ref > -self.V_THRESH:
+               self.v_ref = 0.0
 
-        print('Update state')
-        psi = -msg.psi #Heading angle
-        v = msg.u   #Body velocity
+        self.controller()
+
+    def controller(self):
+        psi = self.psi #Heading angle
+        v = self.vel   #Body velocity
         now = rospy.Time.now()
         dt = (now - self.prev_time).to_sec()
         self.prev_time = now
