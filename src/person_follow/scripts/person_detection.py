@@ -3,21 +3,18 @@
 # Be sure to follow the [installation instructions]
 # (https://github.com/tensorflow/models/blob/master/research/object_detection/g3doc/installation.md)
 # before you start.
-from utils import visualization_utils as vis_util
-from utils import label_map_util
 import numpy as np
 import os
-import sys
 import tensorflow as tf
 import cv2
 import rospy
 from sensor_msgs.msg import Image
-from person_follower.msg import Location
+from person_follow.msg import Location
+from utils import label_map_util
 from cv_bridge import CvBridge, CvBridgeError
+import rospkg
 
-sys.path.append("..")
-
-class PersonFollow:
+class PersonDetection:
     def __init__(self):
         
         # Subscribers
@@ -25,8 +22,8 @@ class PersonFollow:
         self.sub_dep = rospy.Subscriber('/camera/aligned_depth_to_color/image_raw', Image, self.depthCallback)
 
         # Publishers
-        self.pub_loc = rospy.Publisher('person_location', Location, queue=1)
-        self.pub_debug = rospy.Publisher('detection_image', Image, queue=1)
+        self.pub_loc = rospy.Publisher('person_location', Location, queue_size=1)
+        self.pub_debug = rospy.Publisher('detection_image', Image, queue_size =1)
         
 
         #member variables
@@ -35,17 +32,17 @@ class PersonFollow:
         self.middlePixel = self.frameWidth/2.0
         self.raw_score = 0
         self.prev_score = 0
-        self.pixelToNormalCoordsx = (2/self.frameWidth)
+        self.pixelToNormalCoordsx = (2.0/self.frameWidth)
 
         self.bridge = CvBridge()
         self.msgread = {'image': False, 'depth': False}
         self.ready = False
 
         # Tunables
-        self.alpha = 0.15 # score low pass filter
+        self.alpha = 0.2 # score low pass filter
         self.turnGain = 5 # need tuned
         self.velocityGain = 5 # need tuned
-        self.DEPTH_BOX_H = 0.10 * self.frameWidth # for averaging depth
+        self.DEPTH_BOX_H = int( 0.10 * self.frameWidth ) # for averaging depth
 
         self.init()
         
@@ -71,13 +68,13 @@ class PersonFollow:
         self.ready = ready
     
     def init(self):
-        MODEL_NAME = 'ssd_mobilenet_v1_coco_2018_01_28'
+        rospack = rospkg.RosPack()
 
-        # Path to frozen detection graph. This is the actual model that is used for the object detection.
-        PATH_TO_CKPT = MODEL_NAME + '/frozen_inference_graph.pb'
+        MODEL_NAME = rospack.get_path('person_follow') + '/tensorflow/'
+        PATH_TO_CKPT = MODEL_NAME + 'frozen_inference_graph.pb'
 
         # List of the strings that is used to add correct label for each box.
-        PATH_TO_LABELS = os.path.join('data', 'mscoco_label_map.pbtxt')
+        PATH_TO_LABELS = MODEL_NAME + 'mscoco_label_map.pbtxt'
         NUM_CLASSES = 90
 
         # ## Load a (frozen) Tensorflow model into memory.
@@ -95,8 +92,11 @@ class PersonFollow:
             label_map, max_num_classes=NUM_CLASSES, use_display_name=True)
         category_index = label_map_util.create_category_index(categories)
 
+        config = tf.ConfigProto()
+        config.gpu_options.allow_growth = True
+
         with detection_graph.as_default():
-            with tf.Session(graph=detection_graph) as self.sess:
+            with tf.Session(config=config, graph=detection_graph) as self.sess:
                 # Definite input and output Tensors for detection_graph
                 self.image_tensor = detection_graph.get_tensor_by_name('image_tensor:0')
                 # Each box represents a part of the image where a particular object was detected.
@@ -109,12 +109,14 @@ class PersonFollow:
                 self.detection_classes = detection_graph.get_tensor_by_name(
                     'detection_classes:0')
                 self.num_detections = detection_graph.get_tensor_by_name('num_detections:0')
+        
+        rospy.loginfo('TensorFlow ready: Inference graph loaded!!')
 
     def get_depth(self, x_min, y_min, x_max, y_max):
         depth_roi = self.depth_img[y_max-self.DEPTH_BOX_H:y_max,
                                    x_min:x_max]
         dist = np.mean(depth_roi[~np.isinf(depth_roi)])
-        return dist        
+        return dist / 1000.0        
 
     def get_score(self, classes, scores):
         k = -1
@@ -163,8 +165,8 @@ class PersonFollow:
             y_max = corners[3]
             loc.score = filt_score
             loc.dist = self.get_depth(x_min, y_min, x_max, y_max)
-            loc.left_edge = (x_min - self.frameWidth/2)*self.pixelToNormalCoordsx
-            loc.right_edge = (x_max - self.frameWidth/2)*self.pixelToNormalCoordsx
+            loc.left_edge = (x_min - self.frameWidth/2.0)*self.pixelToNormalCoordsx
+            loc.right_edge = (x_max - self.frameWidth/2.0)*self.pixelToNormalCoordsx
             
         self.pub_loc.publish(loc)        
         
@@ -182,12 +184,13 @@ class PersonFollow:
             self.check_ready()
 
 if __name__ == '__main__':
-    rospy.init_node('person_follow_node')
-    node = PersonFollow()
+    rospy.init_node('person_detection_node', log_level=rospy.DEBUG)
+    node = PersonDetection()
     rate = rospy.Rate(15)
     try:
+        rospy.loginfo('PersonDetection node is running')
         while not rospy.is_shutdown():
             node.run()
             rate.sleep()
-    except:
-        rospy.ROSInterruptException
+    except Exception as e:
+        rospy.logerr(e)

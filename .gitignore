@@ -1,6 +1,6 @@
 # Prerequisites
 *.d
-
+*.pyc
 # Compiled Object files
 *.slo
 *.lo
@@ -35,3 +35,4 @@ build
 devel
 .vscode
 *ssd_mobilenet*/
+*.pb

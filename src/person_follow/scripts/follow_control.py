@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-
+from __future__ import print_function
 import rospy
 from kb_utils.msg import Command
 from kb_utils.msg import Encoder
@@ -19,18 +19,18 @@ class Controller:
 
         #Variables for the linear velocity
         self.Kp_v = 0.5
-        self.Kd_v = 0.03
+        self.Kd_v = 0.0
         self.Ki_v =0.0 # 0.1
         self.prev_error_v = 0.0
         self.integrator_v = 0.0
         self.sigma_v = 2.5
         self.prev_v = 0.0
         self.e_sat_v = 0.3
-        self.u_sat_v = 0.3
+        self.u_sat_v = 0.1
 
         self.prev_time = rospy.Time.now()
         self.v_dot = 0.0
-        self.v_command = 0.0
+        self.throttle_cmd = 0.0
         self.v_sat = 1.0
 
         #Variables for the angular velocity
@@ -58,7 +58,7 @@ class Controller:
         self.V_THRESH = 0.05
 
         self.normal_coords_to_psi = .35 # Pay attention to this value and tune if psi performance is wierd
-        self.desired_dist = 2.5
+        self.desired_dist = 1.0
         self.dist_gain = 0.75 # Also look at this value for tuning 
 
         #Image data
@@ -68,7 +68,7 @@ class Controller:
 
     def detection_callback(self, msg):
         #will store the reference value
-        print('Detection message received')
+        # print('Detection message received')
         self.dist = msg.dist
         self.left_edge = msg.left_edge
         self.right_edge = msg.right_edge
@@ -76,7 +76,7 @@ class Controller:
 
     def encoder_callback(self, msg):
         #will store the reference value
-        print('Encoder message received')
+        # print('Encoder message received')
         self.v = msg.vel
 
     def run(self):
@@ -98,7 +98,7 @@ class Controller:
 
     def controller(self):
         psi = self.psi #Heading angle
-        v = self.vel   #Body velocity
+        v = self.v   #Body velocity
         now = rospy.Time.now()
         dt = (now - self.prev_time).to_sec()
         self.prev_time = now
@@ -153,22 +153,28 @@ class Controller:
     	self.prev_v = v
 
     	u_unsat = self.Kp_v * error - self.Kd_v * self.v_dot + self.Ki_v * self.integrator_v
+        print('\nKp_v:', self.Kp_v)
+        print('error:', error)
+        print('Kp*error: ', self.Kp_v*error)
+        print('Kd_v:', self.Kd_v)
+        print('v_dot:', self.v_dot)
+        print('-Kd*v_dot:', self.Kd_v*self.v_dot)
 
     	u = u_unsat
-        print(u)
+        # print(u)
 
     	if u > self.u_sat_v or u < -self.u_sat_v:
-    	    self.v_command = self.u_sat_v * np.sign(u)
+    	    self.throttle_cmd = self.u_sat_v * np.sign(u)
     	else:
-    	    self.v_command = u
+    	    self.throttle_cmd = u
 
     	#Anti wind up. Apply else where also
     	if self.Ki_v != 0.0:
-    	    self.integrator_v = self.integrator_v + dt/self.Ki_v * (self.v_command - u)
+    	    self.integrator_v = self.integrator_v + dt/self.Ki_v * (self.throttle_cmd - u)
 
         vel = Command()
         vel.steer = self.psi_command
-        vel.throttle = self.v_command
+        vel.throttle = self.throttle_cmd
 
         self.command_pub.publish(vel)
 

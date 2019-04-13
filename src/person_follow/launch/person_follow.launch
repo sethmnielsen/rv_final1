@@ -1,0 +1,11 @@
+<launch>
+
+    <node name="person_detection" type="person_detection.py" pkg="person_follow" output="screen"/>
+
+    <node name="follow_control" type="follow_control.py" pkg="person_follow" output="screen"/>
+
+    <node name="teensy" pkg="kb_utils" type="kb_driver.py" args="/dev/ttyACM0"/>
+
+    <include file="$(find kb_utils)/launch/realsense.launch"/>
+
+</launch>
