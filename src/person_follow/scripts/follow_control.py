@@ -25,8 +25,8 @@ class Controller:
         self.integrator_v = 0.0
         self.sigma_v = 2.5
         self.prev_v = 0.0
-        self.e_sat_v = 0.3
-        self.u_sat_v = 0.1
+        self.e_sat_v = 100000.3
+        self.u_sat_v = 0.17
 
         self.prev_time = rospy.Time.now()
         self.v_dot = 0.0
@@ -57,9 +57,9 @@ class Controller:
         self.PSI_THRESH = 0.01
         self.V_THRESH = 0.05
 
-        self.normal_coords_to_psi = .35 # Pay attention to this value and tune if psi performance is wierd
-        self.desired_dist = 1.0
-        self.dist_gain = 0.75 # Also look at this value for tuning 
+        self.normal_coords_to_psi = .127 # Pay attention to this value and tune if psi performance is wierd
+        self.desired_dist = 1.8
+        self.dist_gain = 1.0 # Also look at this value for tuning 
 
         #Image data
         self.dist = 0.0
@@ -153,12 +153,12 @@ class Controller:
     	self.prev_v = v
 
     	u_unsat = self.Kp_v * error - self.Kd_v * self.v_dot + self.Ki_v * self.integrator_v
-        print('\nKp_v:', self.Kp_v)
-        print('error:', error)
-        print('Kp*error: ', self.Kp_v*error)
-        print('Kd_v:', self.Kd_v)
-        print('v_dot:', self.v_dot)
-        print('-Kd*v_dot:', self.Kd_v*self.v_dot)
+        #print('\nKp_v:', self.Kp_v)
+        #print('error:', error)
+        #print('Kp*error: ', self.Kp_v*error)
+        #print('Kd_v:', self.Kd_v)
+        #print('v_dot:', self.v_dot)
+        #print('-Kd*v_dot:', self.Kd_v*self.v_dot)
 
     	u = u_unsat
         # print(u)

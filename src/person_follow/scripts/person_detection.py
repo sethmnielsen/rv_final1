@@ -174,7 +174,7 @@ class PersonDetection:
             img_debug = np.copy(image_np)
             if loc.score > 0.40:
                 cv2.rectangle(img_debug, (corners[0], corners[1]), (corners[2], corners[3]), (255,0,0), 4)
-            img_pub = self.bridge.cv2_to_imgmsg(img_debug)
+            img_pub = self.bridge.cv2_to_imgmsg(img_debug, encoding='rgb8')
             self.pub_debug.publish(img_pub)
         
     def run(self):
